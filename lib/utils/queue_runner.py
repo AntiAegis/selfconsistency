@@ -3,8 +3,12 @@ import numpy as np
 import time
 import multiprocessing as mp
 import threading
-import Queue
-            
+import queue
+
+
+#------------------------------------------------------------------------------
+#   xxxxx
+#------------------------------------------------------------------------------
 class CustomRunner(object):
     """
     This class manages the the background threads needed to fill
@@ -162,4 +166,3 @@ class CustomRunner(object):
         
         # kill second after purging
         [e.set() for e in self.thread_event_killer]
-    

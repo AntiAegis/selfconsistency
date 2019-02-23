@@ -1,6 +1,6 @@
-from __future__ import print_function
-from __future__ import division
-
+#------------------------------------------------------------------------------
+#   Libraries
+#------------------------------------------------------------------------------
 import os, sys, numpy as np, ast
 import init_paths
 import load_models
@@ -10,6 +10,10 @@ import cv2, time, scipy, scipy.misc as scm, sklearn.cluster, skimage.io as skio,
 import matplotlib.pyplot as plt
 from sklearn.cluster import DBSCAN
 
+
+#------------------------------------------------------------------------------
+#   xxxxx
+#------------------------------------------------------------------------------
 def mean_shift(points_, heat_map, iters=5):
     points = np.copy(points_)
     kdt = scipy.spatial.cKDTree(points)
@@ -27,6 +31,10 @@ def mean_shift(points_, heat_map, iters=5):
     ind = np.nonzero(val == np.max(val))
     return np.mean(points[ind[0]], axis=0).reshape(heat_map.shape[0], heat_map.shape[1])
 
+
+#------------------------------------------------------------------------------
+#   xxxxx
+#------------------------------------------------------------------------------
 def centroid_mode(heat_map):
     eps_thresh = np.percentile(heat_map, 10)
     k = heat_map <= eps_thresh
@@ -42,41 +50,78 @@ def centroid_mode(heat_map):
     assert np.max(num_affinities) == num_affinities[ind1, ind2]
     return heat_map[ind1, ind2]
 
+
+#------------------------------------------------------------------------------
+#   xxxxx
+#------------------------------------------------------------------------------
 def normalized_cut(res):
     sc = sklearn.cluster.SpectralClustering(n_clusters=2, n_jobs=-1,
                                             affinity="precomputed")
     out = sc.fit_predict(res.reshape((res.shape[0] * res.shape[1], -1)))
     vis = out.reshape((res.shape[0], res.shape[1]))
     return vis
+
+
+#------------------------------------------------------------------------------
+#   xxxxx
+#------------------------------------------------------------------------------
 def process_response_no_resize(response):
     return 255 * plt.cm.jet(response)[:,:,:3]
 
+
+#------------------------------------------------------------------------------
+#   xxxxx
+#------------------------------------------------------------------------------
 def process_response(response):
     size = get_resized_shape(response)
     im = 255 * plt.cm.jet(response)[:,:,:3]
     return scm.imresize(im, size)# , interp='nearest')
 
+
+#------------------------------------------------------------------------------
+#   xxxxx
+#------------------------------------------------------------------------------
 def get_resized_shape(im, max_im_dim=400):
     ratio = float(max_im_dim) / np.max(im.shape)
     return (int(im.shape[0] * ratio), int(im.shape[1] * ratio), 3)
 
+
+#------------------------------------------------------------------------------
+#   xxxxx
+#------------------------------------------------------------------------------
 def process_image(im):
     size = get_resized_shape(im)
     return scm.imresize(im, size) #, interp='nearest')
 
+
+#------------------------------------------------------------------------------
+#   xxxxx
+#------------------------------------------------------------------------------
 def norm(response):
     res = response - np.min(response)
     return res/np.max(res)
 
+
+#------------------------------------------------------------------------------
+#   xxxxx
+#------------------------------------------------------------------------------
 def apply_mask(im, mask):
     mask = scipy.misc.imresize(mask, (im.shape[0], im.shape[1])) / 255.
     mask = mask.reshape(im.shape[0], im.shape[1], 1)
     mask = mask * 0.8 + 0.2
     return mask * im
 
+
+#------------------------------------------------------------------------------
+#   xxxxx
+#------------------------------------------------------------------------------
 def aff_fn(v1, v2):
     return np.mean((v1 * v2 + (1 - v1)*(1 - v2)))
 
+
+#------------------------------------------------------------------------------
+#   xxxxx
+#------------------------------------------------------------------------------
 def ssd_distance(results, with_inverse=True):
     def ssd(x, y):
         # uses mean instead
@@ -92,6 +137,10 @@ def ssd_distance(results, with_inverse=True):
             dist_matrix[i][j] = score 
     return dist_matrix, results
 
+
+#------------------------------------------------------------------------------
+#   xxxxx
+#------------------------------------------------------------------------------
 def dbscan_consensus(results, eps_range=(0.1, 0.5), eps_sample=10, dbscan_sample=4):
     """
     Slowly increases DBSCAN epsilon until a cluster is found. 
@@ -102,7 +151,6 @@ def dbscan_consensus(results, eps_range=(0.1, 0.5), eps_sample=10, dbscan_sample
     When no cluster is found, returns the response
     that has smallest median score across other responses.
     """
-    
     dist_matrix, results = ssd_distance(results, with_inverse=True)
     
     debug = False #True
@@ -173,6 +221,10 @@ def dbscan_consensus(results, eps_range=(0.1, 0.5), eps_sample=10, dbscan_sample
         plt.imshow(best_pred, cmap='jet', vmin=0.0, vmax=1.0)  
     return best_pred, lowest_spread
 
+
+#------------------------------------------------------------------------------
+#   xxxxx
+#------------------------------------------------------------------------------
 def run_vote_no_threads(image, solver, exif_to_use, n_anchors=1, num_per_dim=None,
              patch_size=None, batch_size=None, sample_ratio=3.0, override_anchor=False):
     """
@@ -287,6 +339,10 @@ def run_vote_no_threads(image, solver, exif_to_use, n_anchors=1, num_per_dim=Non
 
     return {e: {'responses':(responses[e] / vote_counts[e]), 'anchors':anchor_indices} for e in exif_to_use}
 
+
+#------------------------------------------------------------------------------
+#   xxxxx
+#------------------------------------------------------------------------------
 class Demo():
     def __init__(self, ckpt_path='/data/scratch/minyoungg/ckpt/exif_medifor/exif_medifor.ckpt', use_gpu=0,
                  quality=3.0, patch_size=128, num_per_dim=30):
@@ -370,7 +426,11 @@ class Demo():
             # Runs DBSCAN
             out = self.run(im)
         return im, out
-    
+
+
+#------------------------------------------------------------------------------
+#   Main execution
+#------------------------------------------------------------------------------
 if __name__ == '__main__':
     plt.switch_backend('agg')
     parser = argparse.ArgumentParser()

@@ -22,7 +22,7 @@ def config(use_gpu=None):
     return config
 
 def tfprint(x):
-    print x
+    print(x)
     return x
 
 def extract_var(starts_with, is_not=False):
