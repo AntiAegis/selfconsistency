@@ -11,7 +11,7 @@ def initialize_exif(ckpt='', init=True, use_gpu=0):
                 'freeze_base': True,
                 'im_size':128,
                 'batch_size':64,
-                'use_gpu':[use_gpu],
+                'use_gpu':use_gpu,
                 'use_tf_threading':False,
                 'learning_rate':1e-4}
 

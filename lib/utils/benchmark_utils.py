@@ -7,7 +7,6 @@ import numpy as np
 import time
 import scipy.misc
 import cv2
-from time import time
 
 
 class EfficientBenchmark():
@@ -15,7 +14,7 @@ class EfficientBenchmark():
     def __init__(self, solver, net_module_obj, net_module_obj_init_params, im,
                  num_processes=1, num_threads=1, stride=None, max_bs=20000, n_anchors=3,
                  patch_size=224, auto_close_sess=True, patches=None, mirror_pred=False,
-                 dense_compute=False, num_per_dim=30):
+                 dense_compute=False, num_per_dim=20):
         """
         solver: The model solver to run predictions
         net_module_obj: The corresponding net class
@@ -121,8 +120,6 @@ class EfficientBenchmark():
         self.cr.set_data_fn(fn)
         self.cr.start_p_threads(self.solver.sess)
     
-
-
     def get_patch(self, hind, wind):
         return self.image[hind:hind+self.patch_size, wind:wind+self.patch_size]
         
@@ -237,7 +234,7 @@ class EfficientBenchmark():
                     visited[h_ind_[i], w_ind_[i]] = 1
                 if np.sum(visited) == expected_num_running:
                     raise RuntimeError("Finished")
-
+                    
             except tf.errors.OutOfRangeError as e:
                 # TF Queue emptied, return responses
                 if self.auto_close_sess:
@@ -249,56 +246,62 @@ class EfficientBenchmark():
                 return responses
         
     def precomputed_analysis_vote_cls(self, num_fts=4096):
+        #print("Starting Analysis")
         assert not self.auto_close_sess, "Need to keep sess open"
         
-        start_time = time()
+        st_time = time.time()
         feature_response = self.run_ft(num_fts=num_fts)
-        
         flattened_features = feature_response.reshape((num_fts, -1)).T
-        # Use np.unravel_index to recover x,y coordinate
         
         spread = max(1, self.patch_size // self.stride)
-        
+
         responses = np.zeros((self.max_h_ind + spread - 1, self.max_w_ind + spread - 1,
                               self.max_h_ind + spread - 1, self.max_w_ind + spread - 1), dtype=np.float32)
+
         vote_counts = np.zeros((self.max_h_ind + spread - 1, self.max_w_ind + spread - 1,
                                 self.max_h_ind + spread - 1, self.max_w_ind + spread - 1)) + 1e-4
-        print("run_ft: %.4f[s]" % (time()-start_time))
+#         print("run_ft: %.4f[s]" % (time.time() - st_time))
         
         iterator = self.argless_extract_inds()
-
-        count = 0
         while True:
-            count += 1
-            # print("count:", count)
+            st_time = time.time()
             try:
                 inds = next(iterator)
+#                 print("inds", inds.shape)
+#                 print(inds)
             except StopIteration as e:
                 if self.auto_close_sess:
                     self.solver.sess.close()
                 out = (responses / vote_counts)
                 return out
+
             patch_a_inds = inds[:, :2]
             patch_b_inds = inds[:, 2:]
-
             a_ind = np.ravel_multi_index(patch_a_inds.T, [self.max_h_ind, self.max_w_ind])
             b_ind = np.ravel_multi_index(patch_b_inds.T, [self.max_h_ind, self.max_w_ind])
+#             print("get_input: %.4f[s]" % (time.time() - st_time))
 
-            # t0 = time()
+            t0 = time.time()
             preds_ = self.solver.sess.run(self.solver.net.pc_cls_pred,
                                           feed_dict={self.net.precomputed_features:flattened_features,
                                                      self.net.im_a_index: a_ind,
                                                      self.net.im_b_index: b_ind})
-            # print(time() - t0)
+#             print("GPU: %.4f[s]" % (time.time() - t0))
 
-            for i in range(preds_.shape[0]):
-                responses[inds[i][0] : (inds[i][0] + spread),
-                          inds[i][1] : (inds[i][1] + spread),
-                          inds[i][2] : (inds[i][2] + spread),
-                          inds[i][3] : (inds[i][3] + spread)] += preds_[i]
-                vote_counts[inds[i][0] : (inds[i][0] + spread),
-                          inds[i][1] : (inds[i][1] + spread),
-                          inds[i][2] : (inds[i][2] + spread),
-                          inds[i][3] : (inds[i][3] + spread)] += 1
+            st_time = time.time()
+#             for i in range(preds_.shape[0]):
+#                 responses[inds[i][0] : (inds[i][0] + spread),
+#                           inds[i][1] : (inds[i][1] + spread),
+#                           inds[i][2] : (inds[i][2] + spread),
+#                           inds[i][3] : (inds[i][3] + spread)] += preds_[i]
+#                 vote_counts[inds[i][0] : (inds[i][0] + spread),
+#                           inds[i][1] : (inds[i][1] + spread),
+#                           inds[i][2] : (inds[i][2] + spread),
+#                           inds[i][3] : (inds[i][3] + spread)] += 1
+
+            responses[inds[:,0], inds[:,1], inds[:,2], inds[:,3]] += preds_[:,0]
+            vote_counts[inds[:,0], inds[:,1], inds[:,2], inds[:,3]] += 1
         
-        print("count:", count)
+#             a[ind[:,0]:ind[:,0]+s, ind[:,1]:ind[:,1]+s, ind[:,2]:ind[:,2]+s, ind[:,3]:ind[:,3]+s] += preds_
+
+#             print("get_output: %.4f[s]" % (time.time() - st_time))

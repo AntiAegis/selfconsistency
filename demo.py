@@ -7,10 +7,8 @@ import load_models
 from lib.utils import benchmark_utils, util
 import tensorflow as tf
 import cv2, time, scipy, scipy.misc as scm, sklearn.cluster, skimage.io as skio, numpy as np, argparse
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 from sklearn.cluster import DBSCAN
-from PIL import Image
-from time import time
 
 def mean_shift(points_, heat_map, iters=5):
     points = np.copy(points_)
@@ -298,41 +296,34 @@ class Demo():
         self.im_size = patch_size
         tf.reset_default_graph()
         im = np.zeros((256, 256, 3))
-        self.bu = benchmark_utils.EfficientBenchmark(self.solver, nc, params, im, auto_close_sess=False, num_threads=1,
+        self.bu = benchmark_utils.EfficientBenchmark(self.solver, nc, params, im, auto_close_sess=False, 
                                                      mirror_pred=False, dense_compute=False, stride=None, n_anchors=10,
                                                      patch_size=patch_size, num_per_dim=num_per_dim)
+        return
 
-    def run(self, im, gt=None, show=False, save=False,
-            blue_high=False, use_ncuts=False):
-        # run for every new image
+    def run(self, im, gt=None, show=False, save=False, blue_high=False, use_ncuts=False):
+        
+        # Predict
         self.bu.reset_image(im)
         res = self.bu.precomputed_analysis_vote_cls(num_fts=4096)
-        #print('result shape', np.shape(res))
-        print("mean_shift...")
-        ms = mean_shift(res.reshape((-1, res.shape[0] * res.shape[1])), res)
-        
-        if np.mean(ms > .5) > .5:
-            # majority of the image is above .5
-            if blue_high:
-                ms = 1 - ms
-        
-        if use_ncuts:
-            print("normalized_cut...")
-            ncuts = normalized_cut(res)
-            if np.mean(ncuts > .5) > .5:
-                # majority of the image is white
-                # flip so spliced is white
-                ncuts = 1 - ncuts
-            out_ncuts = cv2.resize(ncuts.astype(np.float32), (im.shape[1], im.shape[0]),
-                                   interpolation=cv2.INTER_LINEAR)
 
-        out_ms = cv2.resize(ms, (im.shape[1], im.shape[0]), interpolation=cv2.INTER_LINEAR)
-            
-            
+#         # Use meanshift
+#         ms = mean_shift(res.reshape((-1, res.shape[0] * res.shape[1])), res)
+#         if np.mean(ms > .5) > .5: # majority of the image is above .5
+#             if blue_high:
+#                 ms = 1 - ms
+#         out_ms = cv2.resize(ms, (im.shape[1], im.shape[0]))
+        
+        # Use ncuts
         if use_ncuts:
-            return out_ms, out_ncuts
-        return out_ms
+            ncuts = normalized_cut(res)
+#             if np.mean(ncuts > .5) > .5:
+#                 ncuts = 1 - ncuts
+            out_ncuts = cv2.resize(ncuts.astype(np.float32), (im.shape[1], im.shape[0]))
+            
+        return out_ncuts
     
+
     def run_vote(self, im, num_per_dim=3, patch_size=128):
         h,w = np.shape(im)[:2]
         all_results = []
@@ -353,7 +344,7 @@ class Demo():
                    Using dense will be low-res and low-variance.
         @Returns
             output of the clustered response
-        """    
+        """
         if type(url) is not str:
             im = url
         else:
@@ -373,96 +364,37 @@ class Demo():
             out = self.run(im)
         return im, out
     
-def np_f1(output, target, eps=1e-6):
-    """
-    output (np.float32) shape (H,W), range [0, 1]
-    target (np.float32) shape (H,W), value {0, 1}
-    """
-    output_p = output.round()
-    target_p = target.copy()
-    output_n = 1 - output_p
-    target_n = 1 - target_p
-
-    TP = (output_p * target_p).sum()
-    FN = (output_n * target_p).sum()
-    FP = (output_p * target_n).sum()
-    f1_val = (2*TP + eps) / (2*TP + FN + FP + eps)
-    return f1_val
-    
 if __name__ == '__main__':
-#     plt.switch_backend('agg')
-#     parser = argparse.ArgumentParser()
-#     parser.add_argument("--im_path", type=str, help="path_to_image")
-#     cfg = parser.parse_args()
+    plt.switch_backend('agg')
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--im_path", type=str, help="path_to_image")
+    cfg = parser.parse_args()
     
-#     assert os.path.exists(cfg.im_path)
+    assert os.path.exists(cfg.im_path)
     
-#     imid = cfg.im_path.split('/')[-1].split('.')[0]
-#     save_path = os.path.join('./images', imid + '_result.png')
+    imid = cfg.im_path.split('/')[-1].split('.')[0]
+    save_path = os.path.join('./images', imid + '_result.png')
     
     ckpt_path = './ckpt/exif_final/exif_final.ckpt'
     exif_demo = Demo(ckpt_path=ckpt_path, use_gpu=0, quality=3.0, num_per_dim=30)
     
-#     print('Running image %s' % cfg.im_path)
-#     ms_st = time.time()
-#     im_path = cfg.im_path
-#     image = np.array(Image.open(im_path).convert("RGB"))
-#     image = cv2.resize(image, (512,512))
-#     im, res = exif_demo(im_path, dense=True)
-#     print('MeanShift run time: %.3f' % (time.time() - ms_st))
+    print('Running image %s' % cfg.im_path)
+    ms_st = time.time()
+    im_path = cfg.im_path
+    im, res = exif_demo(im_path, dense=True)
+    print('MeanShift run time: %.3f' % (time.time() - ms_st))
     
-#     plt.subplots(figsize=(16, 8))
-#     plt.subplot(1, 3, 1)
-#     plt.title('Input Image')
-#     plt.imshow(im)
-#     plt.axis('off')
+    plt.subplots(figsize=(16, 8))
+    plt.subplot(1, 3, 1)
+    plt.title('Input Image')
+    plt.imshow(im)
+    plt.axis('off')
 
-#     plt.subplot(1, 3, 2)
-#     plt.title('Cluster w/ MeanShift')
-#     plt.axis('off')
-#     if np.mean(res > 0.5) > 0.5:
-#         res = 1.0 - res
-#     plt.imshow(res, cmap='jet', vmin=0.0, vmax=1.0)
-#     plt.savefig(save_path)
-#     print('Result saved %s' % save_path)
-
-
-    from glob import glob
-    import os
-
-    f1_scores = []
-    for file in sorted(glob("/media/antiaegis/storing/datasets/Forgery/Carvalho/Carvalho/au/images/*.*")):
-        print("\n==========================")
-        print("Predicting %s" % (file))
-        start_time = time()
-        image = image = np.array(Image.open(file).convert("RGB").resize((512,512),2))
-        _, mask = exif_demo(image, dense=True)
-        mask = (1.0-mask).astype(np.float32)
-
-        f1_sc = np_f1(mask, np.ones(image.shape[:2], np.float32))
-        f1_scores.append(f1_sc)
-        print("Runtime: %.4f[s]" % (time()-start_time))
-
-    np.save("au_f1_scores.npy", np.array(f1_scores))
-    print("au_avg_f1_scores:", np.mean(f1_scores))
-
-
-    f1_scores = []
-    label_files = sorted(glob("/media/antiaegis/storing/datasets/Forgery/Carvalho/Carvalho/tp/labels/*.*"))
-    for idx, file in enumerate(sorted(glob("/media/antiaegis/storing/datasets/Forgery/Carvalho/Carvalho/tp/images/*.*"))):
-        print("\n==========================")
-        print("Predicting %s" % (file))
-        start_time = time()
-        image = image = np.array(Image.open(file).convert("RGB").resize((512,512),2))
-        _, mask = exif_demo(image, dense=True)
-        mask = (1.0-mask).astype(np.float32)
-
-        label = cv2.imread(label_files[idx], 0)
-        label[label>0]=1
-        label = label.astype(np.float32)
-        f1_sc = np_f1(mask, label)
-        f1_scores.append(f1_sc)
-        print("Runtime: %.4f[s]" % (time()-start_time))
-
-    np.save("tp_f1_scores.npy", np.array(f1_scores))
-    print("tp_avg_f1_scores:", np.mean(f1_scores))
+    plt.subplot(1, 3, 2)
+    plt.title('Cluster w/ MeanShift')
+    plt.axis('off')
+    if np.mean(res > 0.5) > 0.5:
+        res = 1.0 - res
+    plt.imshow(res, cmap='jet', vmin=0.0, vmax=1.0)
+    plt.savefig(save_path)
+    print('Result saved %s' % save_path)
