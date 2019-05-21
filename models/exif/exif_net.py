@@ -71,11 +71,10 @@ class EXIFNet():
         self.im_b_index = tf.placeholder(tf.int32, [None,])
                         
                         
-        self.pc_im_a_feat = tf.map_fn(self.mapping_fn, self.im_a_index, dtype=tf.float32,
-                                 infer_shape=False)   
+        self.pc_im_a_feat = tf.map_fn(self.mapping_fn, self.im_a_index, dtype=tf.float32, infer_shape=False)   
         self.pc_im_a_feat.set_shape((None, 4096))
-        self.pc_im_b_feat = tf.map_fn(self.mapping_fn, self.im_b_index, dtype=tf.float32,
-                                 infer_shape=False)  
+
+        self.pc_im_b_feat = tf.map_fn(self.mapping_fn, self.im_b_index, dtype=tf.float32, infer_shape=False)  
         self.pc_im_b_feat.set_shape((None, 4096))
         
         self.model()

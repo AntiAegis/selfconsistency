@@ -1,6 +1,6 @@
-#------------------------------------------------------------------------------
-#   Libraries
-#------------------------------------------------------------------------------
+from __future__ import print_function
+from __future__ import division
+
 import os, sys, numpy as np, ast
 import init_paths
 import load_models
@@ -9,11 +9,9 @@ import tensorflow as tf
 import cv2, time, scipy, scipy.misc as scm, sklearn.cluster, skimage.io as skio, numpy as np, argparse
 import matplotlib.pyplot as plt
 from sklearn.cluster import DBSCAN
+from PIL import Image
+from time import time
 
-
-#------------------------------------------------------------------------------
-#   xxxxx
-#------------------------------------------------------------------------------
 def mean_shift(points_, heat_map, iters=5):
     points = np.copy(points_)
     kdt = scipy.spatial.cKDTree(points)
@@ -31,10 +29,6 @@ def mean_shift(points_, heat_map, iters=5):
     ind = np.nonzero(val == np.max(val))
     return np.mean(points[ind[0]], axis=0).reshape(heat_map.shape[0], heat_map.shape[1])
 
-
-#------------------------------------------------------------------------------
-#   xxxxx
-#------------------------------------------------------------------------------
 def centroid_mode(heat_map):
     eps_thresh = np.percentile(heat_map, 10)
     k = heat_map <= eps_thresh
@@ -50,78 +44,41 @@ def centroid_mode(heat_map):
     assert np.max(num_affinities) == num_affinities[ind1, ind2]
     return heat_map[ind1, ind2]
 
-
-#------------------------------------------------------------------------------
-#   xxxxx
-#------------------------------------------------------------------------------
 def normalized_cut(res):
     sc = sklearn.cluster.SpectralClustering(n_clusters=2, n_jobs=-1,
                                             affinity="precomputed")
     out = sc.fit_predict(res.reshape((res.shape[0] * res.shape[1], -1)))
     vis = out.reshape((res.shape[0], res.shape[1]))
     return vis
-
-
-#------------------------------------------------------------------------------
-#   xxxxx
-#------------------------------------------------------------------------------
 def process_response_no_resize(response):
     return 255 * plt.cm.jet(response)[:,:,:3]
 
-
-#------------------------------------------------------------------------------
-#   xxxxx
-#------------------------------------------------------------------------------
 def process_response(response):
     size = get_resized_shape(response)
     im = 255 * plt.cm.jet(response)[:,:,:3]
     return scm.imresize(im, size)# , interp='nearest')
 
-
-#------------------------------------------------------------------------------
-#   xxxxx
-#------------------------------------------------------------------------------
 def get_resized_shape(im, max_im_dim=400):
     ratio = float(max_im_dim) / np.max(im.shape)
     return (int(im.shape[0] * ratio), int(im.shape[1] * ratio), 3)
 
-
-#------------------------------------------------------------------------------
-#   xxxxx
-#------------------------------------------------------------------------------
 def process_image(im):
     size = get_resized_shape(im)
     return scm.imresize(im, size) #, interp='nearest')
 
-
-#------------------------------------------------------------------------------
-#   xxxxx
-#------------------------------------------------------------------------------
 def norm(response):
     res = response - np.min(response)
     return res/np.max(res)
 
-
-#------------------------------------------------------------------------------
-#   xxxxx
-#------------------------------------------------------------------------------
 def apply_mask(im, mask):
     mask = scipy.misc.imresize(mask, (im.shape[0], im.shape[1])) / 255.
     mask = mask.reshape(im.shape[0], im.shape[1], 1)
     mask = mask * 0.8 + 0.2
     return mask * im
 
-
-#------------------------------------------------------------------------------
-#   xxxxx
-#------------------------------------------------------------------------------
 def aff_fn(v1, v2):
     return np.mean((v1 * v2 + (1 - v1)*(1 - v2)))
 
-
-#------------------------------------------------------------------------------
-#   xxxxx
-#------------------------------------------------------------------------------
 def ssd_distance(results, with_inverse=True):
     def ssd(x, y):
         # uses mean instead
@@ -137,10 +94,6 @@ def ssd_distance(results, with_inverse=True):
             dist_matrix[i][j] = score 
     return dist_matrix, results
 
-
-#------------------------------------------------------------------------------
-#   xxxxx
-#------------------------------------------------------------------------------
 def dbscan_consensus(results, eps_range=(0.1, 0.5), eps_sample=10, dbscan_sample=4):
     """
     Slowly increases DBSCAN epsilon until a cluster is found. 
@@ -151,6 +104,7 @@ def dbscan_consensus(results, eps_range=(0.1, 0.5), eps_sample=10, dbscan_sample
     When no cluster is found, returns the response
     that has smallest median score across other responses.
     """
+    
     dist_matrix, results = ssd_distance(results, with_inverse=True)
     
     debug = False #True
@@ -221,10 +175,6 @@ def dbscan_consensus(results, eps_range=(0.1, 0.5), eps_sample=10, dbscan_sample
         plt.imshow(best_pred, cmap='jet', vmin=0.0, vmax=1.0)  
     return best_pred, lowest_spread
 
-
-#------------------------------------------------------------------------------
-#   xxxxx
-#------------------------------------------------------------------------------
 def run_vote_no_threads(image, solver, exif_to_use, n_anchors=1, num_per_dim=None,
              patch_size=None, batch_size=None, sample_ratio=3.0, override_anchor=False):
     """
@@ -339,10 +289,6 @@ def run_vote_no_threads(image, solver, exif_to_use, n_anchors=1, num_per_dim=Non
 
     return {e: {'responses':(responses[e] / vote_counts[e]), 'anchors':anchor_indices} for e in exif_to_use}
 
-
-#------------------------------------------------------------------------------
-#   xxxxx
-#------------------------------------------------------------------------------
 class Demo():
     def __init__(self, ckpt_path='/data/scratch/minyoungg/ckpt/exif_medifor/exif_medifor.ckpt', use_gpu=0,
                  quality=3.0, patch_size=128, num_per_dim=30):
@@ -352,10 +298,9 @@ class Demo():
         self.im_size = patch_size
         tf.reset_default_graph()
         im = np.zeros((256, 256, 3))
-        self.bu = benchmark_utils.EfficientBenchmark(self.solver, nc, params, im, auto_close_sess=False, 
+        self.bu = benchmark_utils.EfficientBenchmark(self.solver, nc, params, im, auto_close_sess=False, num_threads=1,
                                                      mirror_pred=False, dense_compute=False, stride=None, n_anchors=10,
                                                      patch_size=patch_size, num_per_dim=num_per_dim)
-        return
 
     def run(self, im, gt=None, show=False, save=False,
             blue_high=False, use_ncuts=False):
@@ -363,6 +308,7 @@ class Demo():
         self.bu.reset_image(im)
         res = self.bu.precomputed_analysis_vote_cls(num_fts=4096)
         #print('result shape', np.shape(res))
+        print("mean_shift...")
         ms = mean_shift(res.reshape((-1, res.shape[0] * res.shape[1])), res)
         
         if np.mean(ms > .5) > .5:
@@ -371,7 +317,7 @@ class Demo():
                 ms = 1 - ms
         
         if use_ncuts:
-
+            print("normalized_cut...")
             ncuts = normalized_cut(res)
             if np.mean(ncuts > .5) > .5:
                 # majority of the image is white
@@ -426,42 +372,97 @@ class Demo():
             # Runs DBSCAN
             out = self.run(im)
         return im, out
+    
+def np_f1(output, target, eps=1e-6):
+    """
+    output (np.float32) shape (H,W), range [0, 1]
+    target (np.float32) shape (H,W), value {0, 1}
+    """
+    output_p = output.round()
+    target_p = target.copy()
+    output_n = 1 - output_p
+    target_n = 1 - target_p
 
-
-#------------------------------------------------------------------------------
-#   Main execution
-#------------------------------------------------------------------------------
+    TP = (output_p * target_p).sum()
+    FN = (output_n * target_p).sum()
+    FP = (output_p * target_n).sum()
+    f1_val = (2*TP + eps) / (2*TP + FN + FP + eps)
+    return f1_val
+    
 if __name__ == '__main__':
-    plt.switch_backend('agg')
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--im_path", type=str, help="path_to_image")
-    cfg = parser.parse_args()
+#     plt.switch_backend('agg')
+#     parser = argparse.ArgumentParser()
+#     parser.add_argument("--im_path", type=str, help="path_to_image")
+#     cfg = parser.parse_args()
     
-    assert os.path.exists(cfg.im_path)
+#     assert os.path.exists(cfg.im_path)
     
-    imid = cfg.im_path.split('/')[-1].split('.')[0]
-    save_path = os.path.join('./images', imid + '_result.png')
+#     imid = cfg.im_path.split('/')[-1].split('.')[0]
+#     save_path = os.path.join('./images', imid + '_result.png')
     
     ckpt_path = './ckpt/exif_final/exif_final.ckpt'
     exif_demo = Demo(ckpt_path=ckpt_path, use_gpu=0, quality=3.0, num_per_dim=30)
     
-    print('Running image %s' % cfg.im_path)
-    ms_st = time.time()
-    im_path = cfg.im_path
-    im, res = exif_demo(im_path, dense=True)
-    print('MeanShift run time: %.3f' % (time.time() - ms_st))
+#     print('Running image %s' % cfg.im_path)
+#     ms_st = time.time()
+#     im_path = cfg.im_path
+#     image = np.array(Image.open(im_path).convert("RGB"))
+#     image = cv2.resize(image, (512,512))
+#     im, res = exif_demo(im_path, dense=True)
+#     print('MeanShift run time: %.3f' % (time.time() - ms_st))
     
-    plt.subplots(figsize=(16, 8))
-    plt.subplot(1, 3, 1)
-    plt.title('Input Image')
-    plt.imshow(im)
-    plt.axis('off')
+#     plt.subplots(figsize=(16, 8))
+#     plt.subplot(1, 3, 1)
+#     plt.title('Input Image')
+#     plt.imshow(im)
+#     plt.axis('off')
 
-    plt.subplot(1, 3, 2)
-    plt.title('Cluster w/ MeanShift')
-    plt.axis('off')
-    if np.mean(res > 0.5) > 0.5:
-        res = 1.0 - res
-    plt.imshow(res, cmap='jet', vmin=0.0, vmax=1.0)
-    plt.savefig(save_path)
-    print('Result saved %s' % save_path)
+#     plt.subplot(1, 3, 2)
+#     plt.title('Cluster w/ MeanShift')
+#     plt.axis('off')
+#     if np.mean(res > 0.5) > 0.5:
+#         res = 1.0 - res
+#     plt.imshow(res, cmap='jet', vmin=0.0, vmax=1.0)
+#     plt.savefig(save_path)
+#     print('Result saved %s' % save_path)
+
+
+    from glob import glob
+    import os
+
+    f1_scores = []
+    for file in sorted(glob("/media/antiaegis/storing/datasets/Forgery/Carvalho/Carvalho/au/images/*.*")):
+        print("\n==========================")
+        print("Predicting %s" % (file))
+        start_time = time()
+        image = image = np.array(Image.open(file).convert("RGB").resize((512,512),2))
+        _, mask = exif_demo(image, dense=True)
+        mask = (1.0-mask).astype(np.float32)
+
+        f1_sc = np_f1(mask, np.ones(image.shape[:2], np.float32))
+        f1_scores.append(f1_sc)
+        print("Runtime: %.4f[s]" % (time()-start_time))
+
+    np.save("au_f1_scores.npy", np.array(f1_scores))
+    print("au_avg_f1_scores:", np.mean(f1_scores))
+
+
+    f1_scores = []
+    label_files = sorted(glob("/media/antiaegis/storing/datasets/Forgery/Carvalho/Carvalho/tp/labels/*.*"))
+    for idx, file in enumerate(sorted(glob("/media/antiaegis/storing/datasets/Forgery/Carvalho/Carvalho/tp/images/*.*"))):
+        print("\n==========================")
+        print("Predicting %s" % (file))
+        start_time = time()
+        image = image = np.array(Image.open(file).convert("RGB").resize((512,512),2))
+        _, mask = exif_demo(image, dense=True)
+        mask = (1.0-mask).astype(np.float32)
+
+        label = cv2.imread(label_files[idx], 0)
+        label[label>0]=1
+        label = label.astype(np.float32)
+        f1_sc = np_f1(mask, label)
+        f1_scores.append(f1_sc)
+        print("Runtime: %.4f[s]" % (time()-start_time))
+
+    np.save("tp_f1_scores.npy", np.array(f1_scores))
+    print("tp_avg_f1_scores:", np.mean(f1_scores))

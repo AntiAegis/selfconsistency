@@ -7,6 +7,7 @@ import numpy as np
 import time
 import scipy.misc
 import cv2
+from time import time
 
 
 class EfficientBenchmark():
@@ -120,6 +121,8 @@ class EfficientBenchmark():
         self.cr.set_data_fn(fn)
         self.cr.start_p_threads(self.solver.sess)
     
+
+
     def get_patch(self, hind, wind):
         return self.image[hind:hind+self.patch_size, wind:wind+self.patch_size]
         
@@ -234,7 +237,7 @@ class EfficientBenchmark():
                     visited[h_ind_[i], w_ind_[i]] = 1
                 if np.sum(visited) == expected_num_running:
                     raise RuntimeError("Finished")
-                    
+
             except tf.errors.OutOfRangeError as e:
                 # TF Queue emptied, return responses
                 if self.auto_close_sess:
@@ -246,9 +249,9 @@ class EfficientBenchmark():
                 return responses
         
     def precomputed_analysis_vote_cls(self, num_fts=4096):
-        #print("Starting Analysis")
         assert not self.auto_close_sess, "Need to keep sess open"
         
+        start_time = time()
         feature_response = self.run_ft(num_fts=num_fts)
         
         flattened_features = feature_response.reshape((num_fts, -1)).T
@@ -260,9 +263,14 @@ class EfficientBenchmark():
                               self.max_h_ind + spread - 1, self.max_w_ind + spread - 1), dtype=np.float32)
         vote_counts = np.zeros((self.max_h_ind + spread - 1, self.max_w_ind + spread - 1,
                                 self.max_h_ind + spread - 1, self.max_w_ind + spread - 1)) + 1e-4
+        print("run_ft: %.4f[s]" % (time()-start_time))
         
         iterator = self.argless_extract_inds()
+
+        count = 0
         while True:
+            count += 1
+            # print("count:", count)
             try:
                 inds = next(iterator)
             except StopIteration as e:
@@ -276,13 +284,13 @@ class EfficientBenchmark():
             a_ind = np.ravel_multi_index(patch_a_inds.T, [self.max_h_ind, self.max_w_ind])
             b_ind = np.ravel_multi_index(patch_b_inds.T, [self.max_h_ind, self.max_w_ind])
 
-            # t0 = time.time()
+            # t0 = time()
             preds_ = self.solver.sess.run(self.solver.net.pc_cls_pred,
                                           feed_dict={self.net.precomputed_features:flattened_features,
                                                      self.net.im_a_index: a_ind,
                                                      self.net.im_b_index: b_ind})
-            # print preds_
-            # print time.time() - t0
+            # print(time() - t0)
+
             for i in range(preds_.shape[0]):
                 responses[inds[i][0] : (inds[i][0] + spread),
                           inds[i][1] : (inds[i][1] + spread),
@@ -292,5 +300,5 @@ class EfficientBenchmark():
                           inds[i][1] : (inds[i][1] + spread),
                           inds[i][2] : (inds[i][2] + spread),
                           inds[i][3] : (inds[i][3] + spread)] += 1
-                
-
+        
+        print("count:", count)
